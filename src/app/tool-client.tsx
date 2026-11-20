@@ -14,15 +14,13 @@ import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from
 import {
   toolConfig,
   templateBaseVersion,
-  ToolCanvas,
-  ToolToolbar,
-  ToolSidebar,
+  yamlFormatterTool,
+  formatYaml,
+  Canvas,
+  Toolbar,
+  Sidebar,
 } from '@/tool';
-import { notepadTool as notepadToolDef, type NotepadState } from '@/tool/notepad-state';
-
-const DEFAULT_FONT_SIZE = 16;
-const MIN_FONT_SIZE = 8;
-const MAX_FONT_SIZE = 72;
+import type { ToolState } from '@/tool';
 
 export default function ToolClient() {
   const ToolShellCompat = ToolShell as unknown as ComponentType<Record<string, unknown>> & {
@@ -33,7 +31,7 @@ export default function ToolClient() {
     StatusBar?: ComponentType<{ children?: ReactNode }>;
   };
   const canvasRef = useRef<HTMLDivElement>(null);
-  const tool = useTool<NotepadState>(notepadToolDef, canvasRef);
+  const tool = useTool<ToolState>(yamlFormatterTool, canvasRef);
   const setToolData = tool.state.setData;
   const showToast = tool.toast;
   const [isSharing, setIsSharing] = useState(false);
@@ -41,24 +39,34 @@ export default function ToolClient() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(
     () => typeof window !== 'undefined' && window.innerWidth > 768 && toolConfig.features.sidebar
   );
-  const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
 
-  const title = tool.state.data.title?.trim() || toolConfig.name;
+  const title = toolConfig.name;
 
   useEffect(() => {
     document.title = title;
   }, [title]);
 
-  const handleTextChange = useCallback(
-    (text: string) => {
-      setToolData((prev) => ({ ...prev, content: text }));
+  const applyFormat = useCallback(
+    (updater: (state: ToolState) => ToolState) => {
+      setToolData((prev) => formatYaml(updater(prev)));
     },
     [setToolData]
   );
 
-  const handleFontSizeChange = useCallback((delta: number) => {
-    setFontSize((prev) => Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, prev + delta)));
-  }, []);
+  const handleStateChange = useCallback(
+    (next: ToolState) => {
+      setToolData(() => formatYaml(next));
+    },
+    [setToolData]
+  );
+
+  const handleFormat = useCallback(() => {
+    setToolData((prev) => formatYaml(prev));
+  }, [setToolData]);
+
+  const handleClear = useCallback(() => {
+    setToolData((prev) => ({ ...prev, input: '', output: '', error: null }));
+  }, [setToolData]);
 
   useEffect(() => {
     if (hasLoadedSharedState.current) return;
@@ -70,7 +78,7 @@ export default function ToolClient() {
       const serialized = decompressFromEncodedURIComponent(encodedState);
       if (!serialized) throw new Error('Invalid shared URL');
       const parsed: unknown = JSON.parse(serialized);
-      const deserialized = notepadToolDef.deserialize(parsed);
+      const deserialized = yamlFormatterTool.deserialize(parsed);
       if (!deserialized.success) throw new Error(deserialized.error);
       setToolData(deserialized.data);
       showToast('Loaded state from shared URL', 'success');
@@ -83,7 +91,7 @@ export default function ToolClient() {
   const handleShare = useCallback(async () => {
     setIsSharing(true);
     try {
-      const serialized = notepadToolDef.serialize(tool.state.data);
+      const serialized = yamlFormatterTool.serialize(tool.state.data);
       const encodedState = compressToEncodedURIComponent(serialized);
       if (!encodedState) throw new Error('Failed to encode state for URL');
       const url = new URL(window.location.href);
@@ -113,7 +121,7 @@ export default function ToolClient() {
 
   const toolbarContent = (
     <>
-      <ToolToolbar />
+      <Toolbar state={tool.state.data} onChange={handleStateChange} onFormat={handleFormat} onClear={handleClear} />
       <ImportExport
         formats={tool.supportedFormats}
         onExport={tool.handleExport}
@@ -125,36 +133,18 @@ export default function ToolClient() {
     </>
   );
 
-  const sidebarContent = (
-    <ToolSidebar text={tool.state.data.content} fontSize={fontSize} onFontSizeChange={handleFontSizeChange} />
-  );
+  const sidebarContent = <Sidebar state={tool.state.data} onChange={handleStateChange} />;
 
   const canvasContent = (
-    <ToolCanvas
-      canvasRef={canvasRef}
-      text={tool.state.data.content}
-      fontSize={fontSize}
-      onChange={handleTextChange}
-    />
+    <Canvas canvasRef={canvasRef} state={tool.state.data} onChange={handleStateChange} />
   );
 
   const statusBarContent = (
     <>
-      <span
-        className={`status-slot status-slot-state ${tool.state.isDirty ? 'status-unsaved' : 'status-saved'}`}
-      >
-        {tool.state.isDirty ? (
-          <>
-            <span className="status-saving-dot" />
-            Unsaved
-          </>
-        ) : tool.state.lastSaved ? (
-          <>Saved {tool.state.lastSaved}</>
-        ) : (
-          'Ready'
-        )}
+      <span className="status-slot status-slot-state">
+        {tool.state.data.error ? 'Invalid YAML' : 'Valid YAML'}
       </span>
-      <span className="status-slot status-slot-font-size">{fontSize}px</span>
+      <span className="status-slot status-slot-indent">{tool.state.data.indent} spaces</span>
       <span className="status-slot status-slot-tool-version">Tool v{toolConfig.version}</span>
       <span className="status-slot status-slot-template-version">
         Template v{templateBaseVersion}

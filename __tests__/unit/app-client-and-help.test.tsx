@@ -66,12 +66,24 @@ vi.mock('@/tool', () => ({
   ToolSidebar: ({ text }: { text: string }) => <div>sidebar:{text}</div>,
 }));
 
-vi.mock('@/tool/notepad-state', () => ({
-  notepadTool: {
-    serialize: (state: unknown) => JSON.stringify(state),
-    deserialize: () => ({ success: true, data: { content: 'From Shared Url', title: '' } }),
+vi.mock('@/tool', () => ({
+  toolConfig: {
+    id: 'tool-1795184400',
+    name: 'YAML Formatter',
+    version: '1.0.0',
+    features: { sidebar: true },
   },
+  templateBaseVersion: '1.4.0',
+  yamlFormatterTool: {
+    serialize: (state: unknown) => JSON.stringify(state),
+    deserialize: () => ({ success: true, data: { content: 'From Shared Url' } }),
+  },
+  Canvas: () => <div>canvas</div>,
+  Toolbar: () => <div>toolbar</div>,
+  Sidebar: () => <div>sidebar</div>,
+  formatYaml: (s: unknown) => s,
 }));
+
 
 describe('app client and help page', () => {
   beforeEach(() => {

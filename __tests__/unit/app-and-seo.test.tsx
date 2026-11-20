@@ -12,7 +12,9 @@ import { cn } from '@/lib/utils';
 import { generateJsonLd, generateToolMetadata } from '@/lib/seo';
 import toolConfig from '@/tool/tool.config';
 import { getPublicSiteUrl, templateMetadata } from '@/tool/template-metadata';
-import { notepadTool } from '@/tool/notepad-state';
+import { yamlFormatterTool } from '@/tool/yaml-core';
+import { Canvas, Toolbar, Sidebar, formatYaml } from '@/tool';
+import type { ToolState } from '@/tool/types';
 import { ToolCanvas } from '@/tool/components/tool-canvas';
 import { ToolSidebar } from '@/tool/components/tool-sidebar';
 import { ToolToolbar } from '@/tool/components/tool-toolbar';
@@ -92,20 +94,19 @@ describe('app and seo', () => {
   it('covers tool definition and helper exports', async () => {
     expect(cn('a', undefined, 'b', false, null, 'c')).toBe('a b c');
     expect(getPublicSiteUrl()).toBe('http://localhost:3000');
-    expect(notepadTool.deserialize({ content: 'x' })).toEqual({
-      success: true,
-      data: { content: 'x', title: '' },
-    });
-    expect(notepadTool.deserialize({ nope: true })).toEqual({
-      success: false,
-      error: 'Invalid data format: expected { content: string, title?: string }',
-    });
-    expect(notepadTool.serialize({ content: 'x' })).toContain('"content": "x"');
-    expect(notepadTool.deserialize({ content: 'x', title: 'My Note' })).toEqual({
-      success: true,
-      data: { content: 'x', title: 'My Note' },
-    });
-    const exporters = (notepadTool as { exporters?: Array<{ loader: ExporterLoader }> }).exporters ?? [];
+    const validState: ToolState = {
+      input: 'a: 1',
+      output: '',
+      indent: 2,
+      sortMode: 'none',
+      minify: false,
+      tabSize: 2,
+      error: null,
+    };
+    expect(yamlFormatterTool.deserialize(validState).success).toBe(true);
+    expect(yamlFormatterTool.deserialize({ nope: true }).success).toBe(false);
+    expect(yamlFormatterTool.serialize(validState)).toContain('"input"');
+    const exporters = (yamlFormatterTool as { exporters?: Array<{ loader: ExporterLoader }> }).exporters ?? [];
     expect(exporters).toHaveLength(4);
     const first = exporters[0];
     expect(first).toBeDefined();
@@ -116,16 +117,30 @@ describe('app and seo', () => {
   });
 
   it('renders tool components', () => {
+    const validState: ToolState = {
+      input: '',
+      output: '',
+      indent: 2,
+      sortMode: 'none',
+      minify: false,
+      tabSize: 2,
+      error: null,
+    };
     render(
       <>
-        <ToolToolbar />
-        <ToolSidebar text="Hello world" fontSize={16} onFontSizeChange={() => {}} />
-        <ToolCanvas text="" fontSize={16} />
+        <Toolbar
+          state={validState}
+          onChange={() => {}}
+          onFormat={() => {}}
+          onClear={() => {}}
+        />
+        <Sidebar state={validState} onChange={() => {}} />
+        <Canvas state={{ ...validState, output: 'a: 1' }} onChange={() => {}} />
       </>
     );
 
-    expect(screen.getByRole('link', { name: 'Open help page' })).toBeInTheDocument();
-    expect(screen.getByText('11')).toBeInTheDocument(); // char count for "Hello world"
-    expect(screen.getByRole('application', { name: 'Notepad canvas' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Format' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sample YAML' })).toBeInTheDocument();
+    expect(screen.getByRole('application', { name: 'Highlighted YAML output' })).toBeInTheDocument();
   });
 });
